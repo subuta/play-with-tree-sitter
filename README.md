@@ -1,16 +1,14 @@
 # play-with-tree-sitter
 Example of AST parsing Ruby/Python/PHP/TypeScript/JavaScript code
 
-### Prerequisites
-
-Needs to install tree-sitter CLI for easy debugging.
+### How to install
 
 ```bash
-# Install npm dependency (tree-sitter CLI)
+# Install npm dependency (tree-sitter CLI) for debugging
 npm i
 
-# generate configuration
-tree-sitter init-config
+# generate CLI configuration
+npx tree-sitter init-config
 
 # Needs to configure "parser-directories" to follow your desired directory structure of grammar repo.
 
@@ -22,16 +20,23 @@ git clone https://github.com/tree-sitter/tree-sitter-typescript
 cd ~/repo/tree-sitter-typescript && npm i
 
 git clone https://github.com/tree-sitter/tree-sitter-javascript
-cd ~/repo/tree-sitter-javascript && npm i
-
 git clone https://github.com/tree-sitter/tree-sitter-python
-cd ~/repo/tree-sitter-python && npm i
-
 git clone https://github.com/tree-sitter/tree-sitter-php
-cd ~/repo/tree-sitter-php && npm i
-
 git clone https://github.com/tree-sitter/tree-sitter-ruby
-cd ~/repo/tree-sitter-ruby && npm i
+```
+
+### How to develop
+
+```bash
+# Try running "Tagging" by CLI for each language
+npx tree-sitter tags fixtures/Animal.js
+npx tree-sitter tags fixtures/Post.ts
+npx tree-sitter tags fixtures/user.rb
+npx tree-sitter tags fixtures/User.php
+npx tree-sitter tags fixtures/models.py
+
+# Run "Tagging" tests from Rust code.
+cargo test
 ```
 
 ### References

@@ -21,12 +21,14 @@ fn parse_tags(config: TagsConfiguration, source: &[u8]) -> Vec<IndexMap<&str, St
     for result in tags {
         let tag = result.unwrap();
 
+        // SEE: https://github.com/tree-sitter/tree-sitter/blob/v0.20.4/cli/src/tags.rs#L64-L71
         let name = std::str::from_utf8(&source[tag.name_range]).unwrap_or("");
         let kind = config.syntax_type_name(tag.syntax_type_id);
         let def_or_ref = if tag.is_definition { "def" } else { "ref" };
         let first_line = std::str::from_utf8(&source[tag.line_range]).unwrap_or("");
 
         parsed.push(indexmap! {
+                // Wrap all variables as String for preventing exposing local variable reference that Rust compiler would complain :(
                 "name" => String::from(name),
                 "kind" => String::from(kind),
                 "def_or_ref" => String::from(def_or_ref),
@@ -49,10 +51,13 @@ fn parse_js(source: &[u8]) -> Vec<IndexMap<&str, String>> {
 
 #[allow(dead_code)]
 fn parse_ts(source: &[u8]) -> Vec<IndexMap<&str, String>> {
+    // SEE: https://github.com/tree-sitter/tree-sitter-typescript/blob/v0.20.1/package.json#L45-L52
+    let tags_query = tree_sitter_typescript::TAGGING_QUERY.to_owned() + tree_sitter_javascript::TAGGING_QUERY;
+    let locals_query = tree_sitter_typescript::LOCALS_QUERY.to_owned() + tree_sitter_javascript::LOCALS_QUERY;
     let config = TagsConfiguration::new(
         tree_sitter_typescript::language_typescript(),
-        tree_sitter_typescript::TAGGING_QUERY,
-        tree_sitter_typescript::LOCALS_QUERY,
+        &tags_query,
+        &locals_query,
     ).unwrap();
     parse_tags(config, source)
 }
@@ -63,6 +68,26 @@ fn parse_rb(source: &[u8]) -> Vec<IndexMap<&str, String>> {
         tree_sitter_ruby::language(),
         tree_sitter_ruby::TAGGING_QUERY,
         tree_sitter_ruby::LOCALS_QUERY,
+    ).unwrap();
+    parse_tags(config, source)
+}
+
+#[allow(dead_code)]
+fn parse_php(source: &[u8]) -> Vec<IndexMap<&str, String>> {
+    let config = TagsConfiguration::new(
+        tree_sitter_php::language(),
+        tree_sitter_php::TAGS_QUERY,
+        "",
+    ).unwrap();
+    parse_tags(config, source)
+}
+
+#[allow(dead_code)]
+fn parse_py(source: &[u8]) -> Vec<IndexMap<&str, String>> {
+    let config = TagsConfiguration::new(
+        tree_sitter_python::language(),
+        tree_sitter_python::TAGGING_QUERY,
+        "",
     ).unwrap();
     parse_tags(config, source)
 }
@@ -87,17 +112,32 @@ mod tests {
         assert_eq!(tags, expected);
     }
 
-    // #[test]
-    // fn it_should_allow_ts() {
-    //     let source = read_fixture("Post.ts");
-    //     let tags = parse_ts(&source);
-    //
-    //     let expected: Vec<IndexMap<&str, &str>> = vec![
-    //         indexmap! {"name" => "Animal", "kind" => "class", "def_or_ref" => "def", "first_line" => "class Animal extends Model {"},
-    //     ];
-    //
-    //     assert_eq!(tags, expected);
-    // }
+    #[test]
+    fn it_should_allow_ts() {
+        let source = read_fixture("Post.ts");
+        let tags = parse_ts(&source);
+
+        let expected: Vec<IndexMap<&str, &str>> = vec![
+            indexmap! {"name" => "Entity", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@Entity(\"sample10_post\")"},
+            indexmap! {"name" => "Post", "kind" => "class", "def_or_ref" => "def", "first_line" => "export class Post {"},
+            indexmap! {"name" => "PrimaryGeneratedColumn", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@PrimaryGeneratedColumn()"},
+            indexmap! {"name" => "Column", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@Column({"},
+            indexmap! {"name" => "Column", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@Column({"},
+            indexmap! {"name" => "OneToOne", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@OneToOne((type) => PostDetails, (details) => details.post, {"},
+            indexmap! {"name" => "JoinColumn", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@JoinColumn()"},
+            indexmap! {"name" => "PostDetails", "kind" => "type", "def_or_ref" => "ref", "first_line" => "details: PostDetails"},
+            indexmap! {"name" => "OneToMany", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@OneToMany((type) => Image, (image) => image.post, {"},
+            indexmap! {"name" => "OneToMany", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@OneToMany((type) => Image, (image) => image.secondaryPost)"},
+            indexmap! {"name" => "ManyToOne", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@ManyToOne((type) => Cover, (cover) => cover.posts, {"},
+            indexmap! {"name" => "JoinColumn", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@JoinColumn({ name: \"coverId\" })"},
+            indexmap! {"name" => "Cover", "kind" => "type", "def_or_ref" => "ref", "first_line" => "cover: Cover"},
+            indexmap! {"name" => "Column", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@Column(\"int\", {"},
+            indexmap! {"name" => "ManyToMany", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@ManyToMany((type) => Category, (category) => category.posts, {"},
+            indexmap! {"name" => "JoinTable", "kind" => "call", "def_or_ref" => "ref", "first_line" => "@JoinTable()"}
+        ];
+
+        assert_eq!(tags, expected);
+    }
 
     #[test]
     fn it_should_allow_rb() {
@@ -216,6 +256,44 @@ mod tests {
             indexmap! {"name" => "User", "kind" => "call", "def_or_ref" => "ref", "first_line" => "self.activation_digest = User.digest(activation_token)"},
             indexmap! {"name" => "digest", "kind" => "call", "def_or_ref" => "ref", "first_line" => "self.activation_digest = User.digest(activation_token)"},
             indexmap! {"name" => "activation_token", "kind" => "call", "def_or_ref" => "ref", "first_line" => "self.activation_digest = User.digest(activation_token)"}
+        ];
+
+        assert_eq!(tags, expected);
+    }
+
+    #[test]
+    fn it_should_allow_php() {
+        let source = read_fixture("User.php");
+        let tags = parse_php(&source);
+
+        let expected: Vec<IndexMap<&str, &str>> = vec![
+            indexmap! {"name" => "User", "kind" => "class", "def_or_ref" => "def", "first_line" => "class User extends Authenticatable"},
+            indexmap! {"name" => "setPasswordAttribute", "kind" => "function", "def_or_ref" => "def", "first_line" => "public function setPasswordAttribute($password)"},
+            indexmap! {"name" => "posts", "kind" => "function", "def_or_ref" => "def", "first_line" => "public function posts()"},
+            indexmap! {"name" => "hasMany", "kind" => "call", "def_or_ref" => "ref", "first_line" => "return $this->hasMany(Post::class);"}
+        ];
+
+        assert_eq!(tags, expected);
+    }
+
+    #[test]
+    fn it_should_allow_py() {
+        let source = read_fixture("models.py");
+        let tags = parse_py(&source);
+
+        let expected: Vec<IndexMap<&str, &str>> = vec![
+            indexmap! {"name" => "Question", "kind" => "class", "def_or_ref" => "def", "first_line" => "class Question(models.Model):"},
+            indexmap! {"name" => "CharField", "kind" => "call", "def_or_ref" => "ref", "first_line" => "question_text = models.CharField(max_length=200)"},
+            indexmap! {"name" => "DateTimeField", "kind" => "call", "def_or_ref" => "ref", "first_line" => "pub_date = models.DateTimeField('date published')"},
+            indexmap! {"name" => "__str__", "kind" => "function", "def_or_ref" => "def", "first_line" => "def __str__(self):"},
+            indexmap! {"name" => "was_published_recently", "kind" => "function", "def_or_ref" => "def", "first_line" => "def was_published_recently(self):"},
+            indexmap! {"name" => "now", "kind" => "call", "def_or_ref" => "ref", "first_line" => "now = timezone.now()"},
+            indexmap! {"name" => "timedelta", "kind" => "call", "def_or_ref" => "ref", "first_line" => "return now - datetime.timedelta(days=1) <= self.pub_date <= now"},
+            indexmap! {"name" => "Choice", "kind" => "class", "def_or_ref" => "def", "first_line" => "class Choice(models.Model):"},
+            indexmap! {"name" => "ForeignKey", "kind" => "call", "def_or_ref" => "ref", "first_line" => "question = models.ForeignKey(Question, on_delete=models.CASCADE)"},
+            indexmap! {"name" => "CharField", "kind" => "call", "def_or_ref" => "ref", "first_line" => "choice_text = models.CharField(max_length=200)"},
+            indexmap! {"name" => "IntegerField", "kind" => "call", "def_or_ref" => "ref", "first_line" => "votes = models.IntegerField(default=0)"},
+            indexmap! {"name" => "__str__", "kind" => "function", "def_or_ref" => "def", "first_line" => "def __str__(self):"}
         ];
 
         assert_eq!(tags, expected);
